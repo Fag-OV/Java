@@ -1,0 +1,142 @@
+package classify
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import org.apache.commons.mail.DefaultAuthenticator;
+import org.apache.commons.mail.Email;
+import org.apache.commons.mail.EmailException;
+import org.apache.commons.mail.SimpleEmail;
+
+
+/**
+ * A class that provides an easier interface to Apache Commons Email.
+ * 
+ * @author jfgmmg
+ */
+class EmailSender {
+    EmailSender(
+        String smtpServer,
+        int smtpPort,
+        String sourceAddr,
+        String sourceAddrPwd,
+        SecurityMode securityMode
+    )  {
+        Matcher m = PATTERN.matcher(sourceAddr);
+        if (!m.matches())
+            throw new IllegalEmailException("Invalid source email addr: " + sourceAddr);
+        if (!(smtpPort >= 1 && smtpPort <= 65535))
+            throw new IllegalArgumentException("Invalid port number: " + smtpPort);
+
+        this.smtpServer = smtpServer;
+        this.smtpPort = smtpPort;
+        this.sourceAddr = sourceAddr;
+        this.authenticator = new DefaultAuthenticator(sourceAddr, sourceAddrPwd);
+        this.securityMode = securityMode;
+    }
+
+    EmailSender(
+        String smtpServer,
+        String sourceAddr,
+        String sourceAddrPwd,
+        SecurityMode securityMode
+    )  {
+        this(
+            smtpServer,
+            securityMode == SecurityMode.PLAIN ? 25
+                : securityMode == SecurityMode.TLS ? 465
+                : 587,
+            sourceAddr,
+            sourceAddrPwd,
+            securityMode
+        );
+    }
+
+    EmailSender(String smtpServer, String sourceAddr, String sourceAddrPwd) {
+        this(smtpServer, sourceAddr, sourceAddrPwd, SecurityMode.START_TLS);
+    }
+
+    public void send(String destAddr, String subject, String msg) {
+        send(new String[]{destAddr}, new String[0], new String[0], subject, msg);
+    }
+    
+    public void send(
+            String[] destAddr, 
+            String[] cc, 
+            String[] bcc, 
+            String subject, 
+            String msg
+    ) {
+        Email email = new SimpleEmail();
+        email.setHostName(this.smtpServer);
+        email.setAuthenticator(this.authenticator);
+        
+        if (this.securityMode == SecurityMode.TLS) {
+            email.setSslSmtpPort(String.valueOf(this.smtpPort));
+            email.setSSLOnConnect(true);
+        }
+        else if (this.securityMode == SecurityMode.START_TLS) {
+            email.setSmtpPort(this.smtpPort);
+            email.setStartTLSRequired(true);
+        }
+        else
+            email.setSmtpPort(this.smtpPort);
+
+        try {
+            email.setFrom(this.sourceAddr);
+            email.addTo(destAddr);
+            if (cc.length > 0) {
+                email.addCc(cc);
+            }
+            if (bcc.length > 0) {
+                email.addBcc(bcc);
+            }
+            if (subject.length() > 0) {
+                email.setSubject(subject);
+            }
+            if (msg.length() > 0) {
+                email.setMsg(msg);           
+            }
+        }
+        catch (EmailException ex) {
+            throw new IllegalEmailException(
+                "Unable to compose message: " + ex.getMessage(), ex
+            );
+        }
+
+        try {
+            email.send();
+        }
+        catch (EmailException ex) {
+            throw new IllegalEmailException(
+                "Unable to send message: " + ex.getMessage(), ex
+            );
+        }
+    }
+
+    private String smtpServer;
+    private int smtpPort;
+    private String sourceAddr;
+    private DefaultAuthenticator authenticator;
+    private SecurityMode securityMode;
+    public enum SecurityMode {
+        PLAIN,
+        TLS,
+        START_TLS
+    }
+
+    // The following regexp accepts the email addresses that:
+    // . Have western characters plus '_' , '%' , '+' and '-'
+    // . The lefthand part, before the '@', is limited to 64 characters
+    // . Each subdomain is limited to 63 characters
+    // . Have at most 8 subdomains
+    // private final static String EMAIL_RE =  
+    //     "^[A-Z0-9._%+-]{1,64}@(?:[A-Z0-9-]{1,63}\\.){1,8}[A-Z]{2,63}$";
+
+    private final static String EMAIL_RE =  Utils.EMAIL_REGEX;
+    private final static Pattern PATTERN = Pattern.compile(
+        EMAIL_RE, 
+        Pattern.CASE_INSENSITIVE
+    );
+}

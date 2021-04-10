@@ -1,5 +1,9 @@
-# java
-Project designed to manipulate files, saving to a file .csv and with all other functionality.
+1. Data/hora
+2. Actualizar (email)
+3. Exportar como está no enunciado 
+4. Ler turma da linha de comandos
+
+-----------
 
 TPC/Trabalho:
 
